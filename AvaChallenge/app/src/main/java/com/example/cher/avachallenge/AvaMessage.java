@@ -7,14 +7,14 @@ import java.util.Date;
  */
 public class AvaMessage {
     private String requestCommand;
-    private Date blocId; //might be int instead of Date
+    private String blocId; //might be long or Date instead of String
     private String speakerId; //might be int instead of String
     private String transcript;
 
     public AvaMessage() {
     }
 
-    public AvaMessage(String requestCommand, Date blocId, String speakerId, String transcript) {
+    public AvaMessage(String requestCommand, String blocId, String speakerId, String transcript) {
         this.requestCommand = requestCommand;
         this.blocId = blocId;
         this.speakerId = speakerId;

@@ -4,6 +4,13 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationConfig;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.util.JSONPObject;
 import com.google.gson.Gson;
 import com.pubnub.api.PNConfiguration;
@@ -18,8 +25,11 @@ import com.pubnub.api.models.consumer.pubsub.PNPresenceEventResult;
 
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
@@ -29,8 +39,10 @@ public class MainActivity extends AppCompatActivity {
     private PNConfiguration pnConfiguration;
     private PubNub pubnub;
     private AvaMessage avaMessage;
-    private JSONPObject jsonPObject;
+    private JsonNode nodeWithMessage;
+    private ObjectMapper objectMapper;
     private Gson gson;
+    private List<AvaMessage> messageArrayList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,7 +50,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initializeAPI();
-        setListeners2();
+        messageArrayList = new ArrayList<AvaMessage>();
+        setListeners();
         subscribeToChannel();
     }
 
@@ -50,82 +63,14 @@ public class MainActivity extends AppCompatActivity {
         pnConfiguration.setReconnectionPolicy(PNReconnectionPolicy.LINEAR);
         pubnub = new PubNub(pnConfiguration);
         pnConfiguration.getUuid(); //a default UUID is generated if not provided
+
+        Log.i(TAG, "******************initializeAPI: getUuid default " + pnConfiguration.getUuid());
+        Log.i(TAG, "******************initializeAPI: setUuid to cherence" + pnConfiguration.setUuid("Cherence"));
+        Log.i(TAG, "******************initializeAPI: getUuid after hardcoding" + pnConfiguration.getUuid());
     }
+
 
     private void setListeners(){
-        pubnub.addListener(new SubscribeCallback() {
-            @Override
-
-            public void status(PubNub pubnub, PNStatus status) {
-                // the status object returned is always related to subscribe but could contain
-                // information about subscribe, heartbeat, or errors
-                // use the operationType to switch on different options
-                switch (status.getOperation()) {
-                    // let's combine unsubscribe and subscribe handling for ease of use
-                    case PNSubscribeOperation:
-                    case PNUnsubscribeOperation:
-                        // note: subscribe statuses never have traditional
-                        // errors, they just have categories to represent the
-                        // different issues or successes that occur as part of subscribe
-                        switch(status.getCategory()) {
-                            case PNConnectedCategory:
-                                // this is expected for a subscribe, this means there is no error or issue whatsoever
-                            case PNReconnectedCategory:
-                                // this usually occurs if subscribe temporarily fails but reconnects. This means
-                                // there was an error but there is no longer any issue
-                            case PNDisconnectedCategory:
-                                // this is the expected category for an unsubscribe. This means there
-                                // was no error in unsubscribing from everything
-                            case PNUnexpectedDisconnectCategory:
-                                // this is usually an issue with the internet connection, this is an error, handle appropriately
-                                // retry will be called automatically
-                            case PNAccessDeniedCategory:
-                                // this means that PAM does allow this client to subscribe to this
-                                // channel and channel group configuration. This is another explicit error
-                            default:
-                                // More errors can be directly specified by creating explicit cases for other
-                                // error categories of `PNStatusCategory` such as `PNTimeoutCategory` or `PNMalformedFilterExpressionCategory` or `PNDecryptionErrorCategory`
-                        }
-
-                    case PNHeartbeatOperation:
-                        // heartbeat operations can in fact have errors, so it is important to check first for an error.
-                        // For more information on how to configure heartbeat notifications through the status
-                        // PNObjectEventListener callback, consult <link to the PNCONFIGURATION heartbeart config>
-                        if (status.isError()) {
-                            // There was an error with the heartbeat operation, handle here
-                        } else {
-                            // heartbeat operation was successful
-                        }
-                    default: {
-                        // Encountered unknown status type
-                    }
-                }
-            }
-
-            @Override
-            public void message(PubNub pubnub, PNMessageResult message) {
-                // handle incoming messages
-                // i want to take the message, save it as an avamessage object and add it to an
-                // arraylist that will be displayed by the recyclerview
-
-//                avaMessage = message;
-//
-//                avaMessage = new AvaMessage();
-//                gson = new Gson();
-//                avaMessage = gson.fromJson(message, AvaMessage.class);
-//                jsonPObject = message.getMessage();
-
-            }
-
-            @Override
-            public void presence(PubNub pubnub, PNPresenceEventResult presence) {
-                // handle incoming presence data
-            }
-        });
-
-    }
-
-    private void setListeners2(){
 
         pubnub.addListener(new SubscribeCallback() {
             @Override
@@ -180,30 +125,38 @@ public class MainActivity extends AppCompatActivity {
                     // Message has been received on channel group stored in
                     // message.getActualChannel()
                     Log.i(TAG, "*******************GETmessage has been received on channel group stored in message.getActualChannel: " + message.getMessage());
-                    Log.i(TAG, "*******************message has been received on channel group stored in message.getActualChannel: " + message);
 
                 }
                 else {
                     // Message has been received on channel stored in
                     // message.getSubscribedChannel()
+                    //use message.getmessage to get the jsonnode object.
                     Log.i(TAG, "*******************GETmessage has been received on channel group stored in message.getSubscribedChannel: " + message.getMessage());
-                    Log.i(TAG, "*******************message has been received on channel group stored in message.getSubscribedChannel: " + message);
-
+                    try {
+                        ObjectMapper objectMapper = new ObjectMapper();
+                        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                        avaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
+                        Log.i(TAG, "**************message: check if avaMessage created TRANSCRIPT " + avaMessage.getTranscript());
+                        Log.i(TAG, "**************message: check if avaMessage created SPEAKERID " + avaMessage.getSpeakerId());
+                        Log.i(TAG, "**************message: check if avaMessage created REQUESTCOMMAND " + avaMessage.getRequestCommand());
+                        Log.i(TAG, "**************message: check if avaMessage created BLOCID " + avaMessage.getBlocId());
+                    }
+                    catch (JsonParseException e) {
+                        e.printStackTrace(); }
+                    catch (JsonProcessingException e) {
+                        e.printStackTrace();
+                    }
                 }
-
+                if(avaMessage != null){
+                    messageArrayList.add(avaMessage);
+                    Log.i(TAG, "*************message: arrayList exists and has a size of " + messageArrayList.size());
+                }
                 Log.i(TAG, "*******************message GET MESSAGE: " + message.getMessage());
                 Log.i(TAG, "*******************message MESSAGE: " + message);
                 Log.i(TAG, "*******************message GET TIME TOKEN: " + message.getTimetoken());
                 Log.i(TAG, "*******************message GET ACTUAL CHANNEL: " + message.getActualChannel());
                 Log.i(TAG, "*******************message GET SUBSCRIBED CHANNEL: " + message.getSubscribedChannel());
                 Log.i(TAG, "*******************message GET USER META DATA: " + message.getUserMetadata());
-
-            /*
-                log the following items with your favorite logger
-                    - message.getMessage()
-                    - message.getSubscribedChannel()
-                    - message.getTimetoken()
-            */
             }
 
             @Override
@@ -222,173 +175,3 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 
-//    public static void main(String[] args) {
-//        PNConfiguration pnConfiguration = new PNConfiguration();
-//        pnConfiguration.setSubscribeKey("demo");
-//        pnConfiguration.setPublishKey("demo");
-//
-//        PubNub pubNub = new PubNub(pnConfiguration);
-//
-//        pubNub.addListener(new SubscribeCallback() {
-//            @Override
-//            public void status(PubNub pubnub, PNStatus status) {
-//
-//
-//                if (status.getCategory() == PNStatusCategory.PNUnexpectedDisconnectCategory) {
-//                    // This event happens when radio / connectivity is lost
-//                }
-//
-//                else if (status.getCategory() == PNStatusCategory.PNConnectedCategory) {
-//
-//                    // Connect event. You can do stuff like publish, and know you'll get it.
-//                    // Or just use the connected event to confirm you are subscribed for
-//                    // UI / internal notifications, etc
-//
-//                    if (status.getCategory() == PNStatusCategory.PNConnectedCategory){
-//                        pubnub.publish().channel("awesomeChannel").message("hello!!").async(new PNCallback<PNPublishResult>() {
-//                            @Override
-//                            public void onResponse(PNPublishResult result, PNStatus status) {
-//                                // Check whether request successfully completed or not.
-//                                if (!status.isError()) {
-//
-//                                    // Message successfully published to specified channel.
-//                                }
-//                                // Request processing failed.
-//                                else {
-//
-//                                    // Handle message publish error. Check 'category' property to find out possible issue
-//                                    // because of which request did fail.
-//                                    //
-//                                    // Request can be resent using: [status retry];
-//                                }
-//                            }
-//                        });
-//                    }
-//                }
-//                else if (status.getCategory() == PNStatusCategory.PNReconnectedCategory) {
-//
-//                    // Happens as part of our regular operation. This event happens when
-//                    // radio / connectivity is lost, then regained.
-//                }
-//                else if (status.getCategory() == PNStatusCategory.PNDecryptionErrorCategory) {
-//
-//                    // Handle messsage decryption error. Probably client configured to
-//                    // encrypt messages and on live data feed it received plain text.
-//                }
-//            }
-//
-//            @Override
-//            public void message(PubNub pubnub, PNMessageResult message) {
-//                // Handle new message stored in message.data.message
-//                if (message.getActualChannel() != null) {
-//                    // Message has been received on channel group stored in
-//                    // message.getActualChannel()
-//                }
-//                else {
-//                    // Message has been received on channel stored in
-//                    // message.getSubscribedChannel()
-//                }
-//
-//            /*
-//                log the following items with your favorite logger
-//                    - message.getMessage()
-//                    - message.getSubscribedChannel()
-//                    - message.getTimetoken()
-//            */
-//            }
-//
-//            @Override
-//            public void presence(PubNub pubnub, PNPresenceEventResult presence) {
-//
-//            }
-//        });
-//
-//        pubNub.subscribe().channels(Arrays.asList("awesomeChannel!")).execute();
-//    }
-
-//
-
-
-
-//pubNub.addListener(new SubscribeCallback() {
-//@Override
-//public void status(PubNub pubnub, PNStatus status) {
-//
-//
-//        if (status.getCategory() == PNStatusCategory.PNUnexpectedDisconnectCategory) {
-//        // This event happens when radio / connectivity is lost
-//        }
-//
-//        else if (status.getCategory() == PNStatusCategory.PNConnectedCategory) {
-//
-//        // Connect event. You can do stuff like publish, and know you'll get it.
-//        // Or just use the connected event to confirm you are subscribed for
-//        // UI / internal notifications, etc
-//
-//        if (status.getCategory() == PNStatusCategory.PNConnectedCategory){
-//        pubnub.publish().channel("awesomeChannel").message("hello!!").async(new PNCallback<PNPublishResult>() {
-//@Override
-//public void onResponse(PNPublishResult result, PNStatus status) {
-//        // Check whether request successfully completed or not.
-//        if (!status.isError()) {
-//
-//        // Message successfully published to specified channel.
-//        }
-//        // Request processing failed.
-//        else {
-//
-//        // Handle message publish error. Check 'category' property to find out possible issue
-//        // because of which request did fail.
-//        //
-//        // Request can be resent using: [status retry];
-//        }
-//        }
-//        });
-//        }
-//        }
-//        else if (status.getCategory() == PNStatusCategory.PNReconnectedCategory) {
-//
-//        // Happens as part of our regular operation. This event happens when
-//        // radio / connectivity is lost, then regained.
-//        }
-//        else if (status.getCategory() == PNStatusCategory.PNDecryptionErrorCategory) {
-//
-//        // Handle messsage decryption error. Probably client configured to
-//        // encrypt messages and on live data feed it received plain text.
-//        }
-//        }
-//
-//@Override
-//public void message(PubNub pubnub, PNMessageResult message) {
-//        // Handle new message stored in message.data.message
-//        if (message.getActualChannel() != null) {
-//        // Message has been received on channel group stored in
-//        // message.getActualChannel()
-//        }
-//        else {
-//        // Message has been received on channel stored in
-//        // message.getSubscribedChannel()
-//        }
-//
-//            /*
-//                log the following items with your favorite logger
-//                    - message.getMessage()
-//                    - message.getSubscribedChannel()
-//                    - message.getTimetoken()
-//            */
-//        }
-//
-//@Override
-//public void presence(PubNub pubnub, PNPresenceEventResult presence) {
-//
-//        }
-
-//    ObjectMapper mapper = new ObjectMapper();
-//    BufferedReader fileReader = new BufferedReader(new FileReader(projPath));
-//
-//    JsonNode rootNode = mapper.readTree(fileReader);
-//
-//    //Upgrade our file in memory
-//    applyVersioningStrategy(rootNode);
-//
-//    ProjectModel project = mapJsonNodeToProject(rootNode);

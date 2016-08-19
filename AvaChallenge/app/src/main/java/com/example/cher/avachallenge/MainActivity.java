@@ -2,6 +2,8 @@ package com.example.cher.avachallenge;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -35,24 +37,37 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final String SUBSCRIBE_KEY = "sub-c-897a7150-da55-11e5-9ce2-0619f8945a4f";
     private static final String PUBLISH_KEY = "pub-c-6590f75c-b2bb-4acc-9922-d5fe5aa8dec9";
-    private static final String CHANNEL = "00001c72";
+    public static final String CHANNEL = "00001c72";
     private PNConfiguration pnConfiguration;
     private PubNub pubnub;
-    private AvaMessage avaMessage;
-    private JsonNode nodeWithMessage;
-    private ObjectMapper objectMapper;
-    private Gson gson;
     private List<AvaMessage> messageArrayList;
+    private List<AvaMessage> tempArrayList;
+    private RecyclerView recyclerView;
+    private LinearLayoutManager linearLayoutManager;
+    private CustomAdapter customAdapter;
+    private AvaMessage finalMessage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        initializeViews();
         initializeAPI();
-        messageArrayList = new ArrayList<AvaMessage>();
+        Log.i(TAG, "***************onCreate: OG messageArrayList " + messageArrayList.size());
         setListeners();
         subscribeToChannel();
+    }
+
+    private void initializeViews(){
+        messageArrayList = new ArrayList<AvaMessage>();
+        customAdapter = new CustomAdapter(messageArrayList);
+        recyclerView = (RecyclerView) findViewById(R.id.recyclerView_id);
+//        recyclerView.setHasFixedSize(true);
+        linearLayoutManager = new LinearLayoutManager(getApplicationContext());
+        recyclerView.setLayoutManager(linearLayoutManager);
+        recyclerView.setAdapter(customAdapter);
+
     }
 
     private void initializeAPI(){
@@ -125,7 +140,6 @@ public class MainActivity extends AppCompatActivity {
                     // Message has been received on channel group stored in
                     // message.getActualChannel()
                     Log.i(TAG, "*******************GETmessage has been received on channel group stored in message.getActualChannel: " + message.getMessage());
-
                 }
                 else {
                     // Message has been received on channel stored in
@@ -135,11 +149,14 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         ObjectMapper objectMapper = new ObjectMapper();
                         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-                        avaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
-                        Log.i(TAG, "**************message: check if avaMessage created TRANSCRIPT " + avaMessage.getTranscript());
-                        Log.i(TAG, "**************message: check if avaMessage created SPEAKERID " + avaMessage.getSpeakerId());
-                        Log.i(TAG, "**************message: check if avaMessage created REQUESTCOMMAND " + avaMessage.getRequestCommand());
-                        Log.i(TAG, "**************message: check if avaMessage created BLOCID " + avaMessage.getBlocId());
+                        AvaMessage newAvaMessage;
+                        tempArrayList = new ArrayList<AvaMessage>();
+                        newAvaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
+                        Log.i(TAG, "**************message: check if newAvaMessage created TRANSCRIPT " + newAvaMessage.getTranscript());
+                        Log.i(TAG, "**************message: check if newAvaMessage created SPEAKERID " + newAvaMessage.getSpeakerId());
+                        Log.i(TAG, "**************message: check if newAvaMessage created REQUESTCOMMAND " + newAvaMessage.getRequestCommand());
+                        Log.i(TAG, "**************message: check if newAvaMessage created BLOCID " + newAvaMessage.getBlocId());
+                        tempArrayList.add(newAvaMessage);
                     }
                     catch (JsonParseException e) {
                         e.printStackTrace(); }
@@ -147,16 +164,7 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
-                if(avaMessage != null){
-                    messageArrayList.add(avaMessage);
-                    Log.i(TAG, "*************message: arrayList exists and has a size of " + messageArrayList.size());
-                }
-                Log.i(TAG, "*******************message GET MESSAGE: " + message.getMessage());
-                Log.i(TAG, "*******************message MESSAGE: " + message);
-                Log.i(TAG, "*******************message GET TIME TOKEN: " + message.getTimetoken());
-                Log.i(TAG, "*******************message GET ACTUAL CHANNEL: " + message.getActualChannel());
-                Log.i(TAG, "*******************message GET SUBSCRIBED CHANNEL: " + message.getSubscribedChannel());
-                Log.i(TAG, "*******************message GET USER META DATA: " + message.getUserMetadata());
+                growList();
             }
 
             @Override
@@ -164,14 +172,31 @@ public class MainActivity extends AppCompatActivity {
 
             }
         });
-
     }
 
     private void subscribeToChannel(){
         pubnub.subscribe()
-                .channels(Arrays.asList(CHANNEL)) // subscribe to channel groups. was .channels(Arrays.asList(CHANNEL))
+                .channels(Arrays.asList(CHANNEL))
 //                .withPresence() // also subscribe to related presence information MIGHT NOT NEED
                 .execute();
+    }
+
+    private void growList(){
+        if(tempArrayList != null){
+            int lastPosition = tempArrayList.size();
+            if(lastPosition >= 1){
+                finalMessage = tempArrayList.get(lastPosition - 1);
+                messageArrayList.add(finalMessage);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        //stuff that updates ui
+                        customAdapter.notifyDataSetChanged();
+                    }
+                });
+                Log.i(TAG, "growList: arrayList exists and has a size of " + messageArrayList.size());
+            }
+        }
     }
 }
 

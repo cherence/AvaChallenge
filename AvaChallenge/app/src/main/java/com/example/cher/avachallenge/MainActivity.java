@@ -41,9 +41,11 @@ public class MainActivity extends AppCompatActivity {
     private PNConfiguration pnConfiguration;
     private PubNub pubnub;
     private List<AvaMessage> messageArrayList;
+    private List<AvaMessage> tempArrayList;
     private RecyclerView recyclerView;
     private LinearLayoutManager linearLayoutManager;
     private CustomAdapter customAdapter;
+    private AvaMessage finalMessage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,7 +57,6 @@ public class MainActivity extends AppCompatActivity {
         Log.i(TAG, "***************onCreate: OG messageArrayList " + messageArrayList.size());
         setListeners();
         subscribeToChannel();
-
     }
 
     private void initializeViews(){
@@ -139,7 +140,6 @@ public class MainActivity extends AppCompatActivity {
                     // Message has been received on channel group stored in
                     // message.getActualChannel()
                     Log.i(TAG, "*******************GETmessage has been received on channel group stored in message.getActualChannel: " + message.getMessage());
-
                 }
                 else {
                     // Message has been received on channel stored in
@@ -149,14 +149,14 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         ObjectMapper objectMapper = new ObjectMapper();
                         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-                        AvaMessage avaMessage;
-                        avaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
-                        Log.i(TAG, "**************message: check if avaMessage created TRANSCRIPT " + avaMessage.getTranscript());
-                        Log.i(TAG, "**************message: check if avaMessage created SPEAKERID " + avaMessage.getSpeakerId());
-                        Log.i(TAG, "**************message: check if avaMessage created REQUESTCOMMAND " + avaMessage.getRequestCommand());
-                        Log.i(TAG, "**************message: check if avaMessage created BLOCID " + avaMessage.getBlocId());
-                        messageArrayList.add(avaMessage);
-                        Log.i(TAG, "*************message: arrayList exists and has a size of " + messageArrayList.size());
+                        AvaMessage newAvaMessage;
+                        tempArrayList = new ArrayList<AvaMessage>();
+                        newAvaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
+                        Log.i(TAG, "**************message: check if newAvaMessage created TRANSCRIPT " + newAvaMessage.getTranscript());
+                        Log.i(TAG, "**************message: check if newAvaMessage created SPEAKERID " + newAvaMessage.getSpeakerId());
+                        Log.i(TAG, "**************message: check if newAvaMessage created REQUESTCOMMAND " + newAvaMessage.getRequestCommand());
+                        Log.i(TAG, "**************message: check if newAvaMessage created BLOCID " + newAvaMessage.getBlocId());
+                        tempArrayList.add(newAvaMessage);
                     }
                     catch (JsonParseException e) {
                         e.printStackTrace(); }
@@ -164,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
-
+                growList();
             }
 
             @Override
@@ -172,7 +172,6 @@ public class MainActivity extends AppCompatActivity {
 
             }
         });
-
     }
 
     private void subscribeToChannel(){
@@ -180,6 +179,24 @@ public class MainActivity extends AppCompatActivity {
                 .channels(Arrays.asList(CHANNEL))
 //                .withPresence() // also subscribe to related presence information MIGHT NOT NEED
                 .execute();
+    }
+
+    private void growList(){
+        if(tempArrayList != null){
+            int lastPosition = tempArrayList.size();
+            if(lastPosition >= 1){
+                finalMessage = tempArrayList.get(lastPosition - 1);
+                messageArrayList.add(finalMessage);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        //stuff that updates ui
+                        customAdapter.notifyDataSetChanged();
+                    }
+                });
+                Log.i(TAG, "growList: arrayList exists and has a size of " + messageArrayList.size());
+            }
+        }
     }
 }
 

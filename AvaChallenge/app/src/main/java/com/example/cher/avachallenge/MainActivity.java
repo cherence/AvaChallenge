@@ -2,6 +2,8 @@ package com.example.cher.avachallenge;
 
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -35,21 +37,35 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final String SUBSCRIBE_KEY = "sub-c-897a7150-da55-11e5-9ce2-0619f8945a4f";
     private static final String PUBLISH_KEY = "pub-c-6590f75c-b2bb-4acc-9922-d5fe5aa8dec9";
-    private static final String CHANNEL = "00001c72";
+    public static final String CHANNEL = "00001c72";
     private PNConfiguration pnConfiguration;
     private PubNub pubnub;
     private List<AvaMessage> messageArrayList;
+    private RecyclerView recyclerView;
+    private LinearLayoutManager linearLayoutManager;
+    private CustomAdapter customAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        initializeViews();
         initializeAPI();
-        messageArrayList = new ArrayList<AvaMessage>();
         Log.i(TAG, "***************onCreate: OG messageArrayList " + messageArrayList.size());
         setListeners();
         subscribeToChannel();
+
+    }
+
+    private void initializeViews(){
+        messageArrayList = new ArrayList<AvaMessage>();
+        customAdapter = new CustomAdapter(messageArrayList);
+        recyclerView = (RecyclerView) findViewById(R.id.recyclerView_id);
+//        recyclerView.setHasFixedSize(true);
+        linearLayoutManager = new LinearLayoutManager(getApplicationContext());
+        recyclerView.setLayoutManager(linearLayoutManager);
+        recyclerView.setAdapter(customAdapter);
 
     }
 

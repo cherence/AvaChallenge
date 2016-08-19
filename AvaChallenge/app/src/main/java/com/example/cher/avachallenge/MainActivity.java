@@ -38,10 +38,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String CHANNEL = "00001c72";
     private PNConfiguration pnConfiguration;
     private PubNub pubnub;
-    private AvaMessage avaMessage;
-    private JsonNode nodeWithMessage;
-    private ObjectMapper objectMapper;
-    private Gson gson;
     private List<AvaMessage> messageArrayList;
 
     @Override
@@ -51,8 +47,10 @@ public class MainActivity extends AppCompatActivity {
 
         initializeAPI();
         messageArrayList = new ArrayList<AvaMessage>();
+        Log.i(TAG, "***************onCreate: OG messageArrayList " + messageArrayList.size());
         setListeners();
         subscribeToChannel();
+
     }
 
     private void initializeAPI(){
@@ -135,11 +133,14 @@ public class MainActivity extends AppCompatActivity {
                     try {
                         ObjectMapper objectMapper = new ObjectMapper();
                         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                        AvaMessage avaMessage;
                         avaMessage = objectMapper.treeToValue(message.getMessage(), AvaMessage.class);
                         Log.i(TAG, "**************message: check if avaMessage created TRANSCRIPT " + avaMessage.getTranscript());
                         Log.i(TAG, "**************message: check if avaMessage created SPEAKERID " + avaMessage.getSpeakerId());
                         Log.i(TAG, "**************message: check if avaMessage created REQUESTCOMMAND " + avaMessage.getRequestCommand());
                         Log.i(TAG, "**************message: check if avaMessage created BLOCID " + avaMessage.getBlocId());
+                        messageArrayList.add(avaMessage);
+                        Log.i(TAG, "*************message: arrayList exists and has a size of " + messageArrayList.size());
                     }
                     catch (JsonParseException e) {
                         e.printStackTrace(); }
@@ -147,16 +148,7 @@ public class MainActivity extends AppCompatActivity {
                         e.printStackTrace();
                     }
                 }
-                if(avaMessage != null){
-                    messageArrayList.add(avaMessage);
-                    Log.i(TAG, "*************message: arrayList exists and has a size of " + messageArrayList.size());
-                }
-                Log.i(TAG, "*******************message GET MESSAGE: " + message.getMessage());
-                Log.i(TAG, "*******************message MESSAGE: " + message);
-                Log.i(TAG, "*******************message GET TIME TOKEN: " + message.getTimetoken());
-                Log.i(TAG, "*******************message GET ACTUAL CHANNEL: " + message.getActualChannel());
-                Log.i(TAG, "*******************message GET SUBSCRIBED CHANNEL: " + message.getSubscribedChannel());
-                Log.i(TAG, "*******************message GET USER META DATA: " + message.getUserMetadata());
+
             }
 
             @Override
@@ -169,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void subscribeToChannel(){
         pubnub.subscribe()
-                .channels(Arrays.asList(CHANNEL)) // subscribe to channel groups. was .channels(Arrays.asList(CHANNEL))
+                .channels(Arrays.asList(CHANNEL))
 //                .withPresence() // also subscribe to related presence information MIGHT NOT NEED
                 .execute();
     }

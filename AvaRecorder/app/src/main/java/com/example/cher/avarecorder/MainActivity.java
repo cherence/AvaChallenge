@@ -2,6 +2,7 @@ package com.example.cher.avarecorder;
 
 import android.Manifest;
 import android.annotation.TargetApi;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -9,12 +10,15 @@ import android.media.AudioRecord;
 import android.media.AudioTrack;
 import android.media.Image;
 import android.media.MediaRecorder;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
@@ -32,9 +36,11 @@ import java.io.OutputStream;
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 1224;
+    private static final int SAMPLE_RATE = 8000;
     private ImageView playButton;
     private ImageView recordButton;
     private ImageView stopButton;
+    private ProgressBar progressBar;
     private AudioRecord audioRecord;
     private Boolean recording;
     private DataOutputStream dataOutputStream;
@@ -47,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
         initializeViews();
         disableButtons();
         checkPermissionStatus();
+        setAudioLogistics();
         setPlayButton();
         setRecordButton();
         setStopButton();
@@ -57,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
         playButton = (ImageView) findViewById(R.id.play_button_id);
         recordButton = (ImageView) findViewById(R.id.record_button_id);
         stopButton = (ImageView) findViewById(R.id.stop_button_id);
+        progressBar = (ProgressBar) findViewById(R.id.progressBar_id);
     }
 
     private void disableButtons(){
@@ -79,47 +87,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void setAudioLogistics(){
+
+    }
+
     private void setPlayButton(){
         playButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                File file = new File(Environment.getExternalStorageDirectory(), "test.pcm");
-
-                int shortSizeInBytes = Short.SIZE/Byte.SIZE;
-
-                int bufferSizeInBytes = (int)(file.length()/shortSizeInBytes);
-                short[] audioData = new short[bufferSizeInBytes];
-
-                try {
-                    InputStream inputStream = new FileInputStream(file);
-                    BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
-                    DataInputStream dataInputStream = new DataInputStream(bufferedInputStream);
-
-                    int i = 0;
-                    while(dataInputStream.available() > 0){
-                        audioData[i] = dataInputStream.readShort();
-                        i++;
-                    }
-
-                    dataInputStream.close();
-
-                    AudioTrack audioTrack = new AudioTrack(
-                            AudioManager.STREAM_MUSIC,
-                            11025,
-                            AudioFormat.CHANNEL_CONFIGURATION_MONO,
-                            AudioFormat.ENCODING_PCM_16BIT,
-                            bufferSizeInBytes,
-                            AudioTrack.MODE_STREAM);
-
-                    audioTrack.play();
-                    audioTrack.write(audioData, 0, bufferSizeInBytes);
-
-
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                PlayAsync async = new PlayAsync();
+                async.execute();
             }
         });
 
@@ -130,62 +107,162 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 recording = true;
-                File file = new File(Environment.getExternalStorageDirectory(), "test.pcm"); //may change test.pcm to time + ".pcm"
-
-                try {
-                    file.createNewFile();
-
-                    OutputStream outputStream = new FileOutputStream(file);
-                    BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(outputStream);
-                    dataOutputStream = new DataOutputStream(bufferedOutputStream);
-
-                    int minBufferSize = AudioRecord.getMinBufferSize(11025,
-                            AudioFormat.CHANNEL_CONFIGURATION_MONO,
-                            AudioFormat.ENCODING_PCM_16BIT);
-
-                    short[] audioData = new short[minBufferSize];
-
-                    audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
-                            11025,
-                            AudioFormat.CHANNEL_CONFIGURATION_MONO,
-                            AudioFormat.ENCODING_PCM_16BIT,
-                            minBufferSize);
-
-                    audioRecord.startRecording();
-
-                    while(recording){
-                        int numberOfShort = audioRecord.read(audioData, 0, minBufferSize);
-                        for(int i = 0; i < numberOfShort; i++){
-                            dataOutputStream.writeShort(audioData[i]);
-                        }
-                    }
-//                    audioRecord.stop();
-//                    dataOutputStream.close();
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
+                RecordAsync async = new RecordAsync();
+                async.execute();
             }
         });
     }
+
 
     private void setStopButton(){
         recording = false;
         stopButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                try {
+                StopAsync async = new StopAsync();
+                async.execute();
+            }
+        });
+    }
+
+    private class RecordAsync extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            progressBar.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            try {
+                File file = new File(Environment.getExternalStorageDirectory(), "test.pcm"); //may change test.pcm to time + ".pcm"
+
+                file.createNewFile();
+
+                OutputStream outputStream = new FileOutputStream(file);
+                BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(outputStream);
+                dataOutputStream = new DataOutputStream(bufferedOutputStream);
+
+                int bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT);
+
+                if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE){
+                    bufferSize = SAMPLE_RATE * 2;
+                }
+
+                short[] audioBuffer = new short[bufferSize/2];
+
+                audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT,
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        bufferSize);
+
+                audioRecord.startRecording();
+
+                while(recording){
+                    int numberOfShort = audioRecord.read(audioBuffer, 0, bufferSize);
+                    for(int i = 0; i < numberOfShort; i++){
+                        dataOutputStream.writeShort(audioBuffer[i]);
+                    }
+                }
                     audioRecord.stop();
                     dataOutputStream.close();
 
-                } catch (IOException e) {
-                    e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            progressBar.setVisibility(View.GONE);
+        }
+    }
+
+    private class PlayAsync extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            progressBar.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            File file = new File(Environment.getExternalStorageDirectory(), "test.pcm");
+
+            int shortSizeInBytes = Short.SIZE/Byte.SIZE;
+
+            int bufferSizeInBytes = (int)(file.length()/shortSizeInBytes);
+            short[] audioBuffer = new short[bufferSizeInBytes];
+
+            try {
+                InputStream inputStream = new FileInputStream(file);
+                BufferedInputStream bufferedInputStream = new BufferedInputStream(inputStream);
+                DataInputStream dataInputStream = new DataInputStream(bufferedInputStream);
+
+                int i = 0;
+                while(dataInputStream.available() > 0){
+                    audioBuffer[i] = dataInputStream.readShort();
+                    i++;
                 }
 
+                dataInputStream.close();
 
+                AudioTrack audioTrack = new AudioTrack(
+                        AudioManager.STREAM_MUSIC,
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_OUT_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        bufferSizeInBytes,
+                        AudioTrack.MODE_STREAM);
+
+                audioTrack.play();
+                Log.i(TAG, "onClick: play Audio streaming started");
+                audioTrack.write(audioBuffer, 0, bufferSizeInBytes);
+
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        });
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            progressBar.setVisibility(View.GONE);
+        }
+    }
+
+    private class StopAsync extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            progressBar.setVisibility(View.VISIBLE);
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            try {
+                audioRecord.stop();
+                dataOutputStream.close();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            progressBar.setVisibility(View.GONE);
+        }
     }
 
     /**
@@ -236,18 +313,6 @@ public class MainActivity extends AppCompatActivity {
     /**
      * This method returns to us the results of our permission request
      *
-     * Note that permissions is a String array and grantResults is an integer Array.
-     * This means that:
-     * - permissions[0] relates to grantResults[0]
-     * - permissions[1] relates to grantResults[1]
-     * - permissions[2] relates to grantResults[2]
-     * - etc
-     *
-     * For EACH permission asked. So if you ask for three permissions, both of these arrays
-     * will have size 3 like shown above.
-     *
-     * In our case, we only asked for one permission, so we only check permissions[0] and grantResults[0]
-     *
      * @param requestCode The original code we sent the request with. If this code doesn't match, its not our result.
      * @param permissions Array of permissions in the order they were asked
      * @param grantResults Results for each permission ( granted or not granted ) in the same order of permission array
@@ -277,5 +342,77 @@ public class MainActivity extends AppCompatActivity {
 
 /*
 #4AACEE
+
+public void flac(View view) throws java.io.IOException
+    {
+        recordFlacButtonPressed = !recordFlacButtonPressed;
+
+        if (recordFlacButtonPressed)
+        {
+            File flacFile = new File(filepath + "/temp.flac");
+            final FLACEncoder flacEncoder = new FLACEncoder();
+            EncodingConfiguration encodingConfiguration = new EncodingConfiguration();
+            StreamConfiguration streamConfiguration = new StreamConfiguration(1, 16, 65536, sampleRate, bitsPerSample);
+            FLACFileOutputStream flacFileOutputStream = new FLACFileOutputStream(flacFile);
+
+            flacEncoder.setStreamConfiguration(streamConfiguration);
+            flacEncoder.setEncodingConfiguration(encodingConfiguration);
+            flacEncoder.setOutputStream(flacFileOutputStream);
+
+            flacEncoder.openFLACStream();
+
+            bufferSizeInBytes = sampleRate * bitsPerSample / 8 / 10 * 3;//300 milliseconds in bytes
+
+            audioRecorder = new AudioRecord(audioSource, sampleRate, channelConfig, audioFormat, bufferSizeInBytes);
+            audioRecorder.startRecording();
+
+            recordingThread = new Thread(new Runnable()
+            {
+                public void run()
+                {
+                    while (recordFlacButtonPressed)
+                    {
+                        audioRecorder.read(data, 0, bufferSizeInBytes);
+
+                        //it is not the best way to convert every two bytes of byte array to int array
+                        short[] shorts = new short[data.length / 2];
+                        ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).asShortBuffer().get(shorts);
+
+                        int[] dataInt = new int[shorts.length];
+                        for (int i = 0; i < shorts.length; i++)
+                        {
+                            dataInt[i] = (int) shorts[i];
+                        }
+
+                        flacEncoder.addSamples(dataInt, bufferSizeInBytes / 2); //for signed ints -32656 + 32656
+                        //flacEncoder.addSamples(dataInt, bufferSizeInBytes); //for signed ints - 127 + 128
+
+                        bytesToEncode += bufferSizeInBytes;
+                    }
+
+                    audioRecorder.stop();
+                    audioRecorder.release();
+                    audioRecorder = null;
+
+                    try
+                    {
+                        flacEncoder.encodeSamples(bytesToEncode / 2, false);
+                    }
+                    catch (IOException e)
+                    {
+                        e.printStackTrace();
+                    }
+                    flacEncoder.clear();
+                }
+            });
+
+            if (recordFlacButtonPressed)
+            {
+                recordingThread.start();
+            }
+        }
+    }
+
+
  */
 
